@@ -1120,6 +1120,20 @@ console.log('[Federation] Applying library selection for mapping:', mappingIndex
   renderMappings();
     }
 
+
+        function loadLocalServerInfo() {
+          fetch(apiBaseUrl + '/System/Info/Public')
+            .then(function(r) { return r.json(); })
+            .then(function(info) {
+              var el = document.getElementById('localServerIdValue');
+              if (el) el.textContent = info.Id || 'unknown';
+            })
+            .catch(function() {
+              var el = document.getElementById('localServerIdValue');
+              if (el) el.textContent = 'unavailable';
+            });
+        }
+
  function loadConfiguration() {
      setStatus('Loading configuration...');
    console.log('[Federation] Loading config from:', apiBaseUrl + '/Plugins/Federation/Configuration');
@@ -1157,6 +1171,7 @@ renderServers();
         setStatus('Initializing...');
       loadConfiguration();
       loadLocalLibraries();
+      loadLocalServerInfo();
     })();
     </script>
 </body>

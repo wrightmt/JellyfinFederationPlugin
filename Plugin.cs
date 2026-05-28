@@ -31,11 +31,11 @@ namespace Jellyfin.Plugin.Federation
             _logger = logger;
             Instance = this;
 
-            _logger.LogInformation("=== Jellyfin Federation Plugin v{Version} Initialized ===", Version);
+            _logger.LogInformation("=== Jelly Federation ezlink v{Version} Initialized ===", Version);
         }
 
         /// <inheritdoc />
-        public override string Name => "Jellyfin Federation";
+        public override string Name => "Jelly Federation ezlink";
 
         /// <inheritdoc />
         public override Guid Id => Guid.Parse("12345678-1234-1234-1234-123456789abc");
@@ -57,7 +57,7 @@ namespace Jellyfin.Plugin.Federation
             yield return new PluginPageInfo
             {
                 Name = this.Name,
-                EmbeddedResourcePath = GetType().Namespace + ".Configuration.redirectPage.html"
+                EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
             };
         }
 
