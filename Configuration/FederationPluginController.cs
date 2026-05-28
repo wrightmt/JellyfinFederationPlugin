@@ -255,11 +255,6 @@ namespace Jellyfin.Plugin.Federation.Api
                     return BadRequest(new { success = false, message = "Server URL is required" });
                 }
 
-                if (string.IsNullOrWhiteSpace(server.ApiKey))
-                {
-                    return BadRequest(new { success = false, message = "API Key is required" });
-                }
-
                 _logger.LogInformation("Testing connection to server: {ServerName} ({Url})", server.Name, server.Url);
 
                 using var client = new RemoteServerClient(server, _loggerFactory.CreateLogger<RemoteServerClient>());
@@ -278,35 +273,6 @@ namespace Jellyfin.Plugin.Federation.Api
                     return Ok(new { success = false, message = "Connected but failed to get system information" });
                 }
 
-                // Try to get users if UserId is not specified
-                string? userId = server.UserId;
-                if (string.IsNullOrEmpty(userId))
-                {
-                    var users = await client.GetUsersAsync(cancellationToken);
-                    if (users != null && users.Count > 0)
-                    {
-                        userId = users[0].Id;
-                        _logger.LogInformation("Found {Count} users on remote server, using first user: {UserId}", users.Count, userId);
-
-                        // Try to get libraries with this user
-                        var tempServer = new RemoteServer
-                        {
-                            Id = server.Id,
-                            Name = server.Name,
-                            Url = server.Url,
-                            ApiKey = server.ApiKey,
-                            UserId = userId,
-                            Enabled = server.Enabled
-                        };
-
-                        using var clientWithUser = new RemoteServerClient(tempServer, _loggerFactory.CreateLogger<RemoteServerClient>());
-                        var libraries = await clientWithUser.GetLibrariesAsync(cancellationToken);
-                        var libraryCount = libraries?.Count ?? 0;
-
-                        _logger.LogInformation("Found {Count} libraries on remote server", libraryCount);
-                    }
-                }
-
                 return Ok(new
                 {
                     success = true,
@@ -316,8 +282,7 @@ namespace Jellyfin.Plugin.Federation.Api
                         name = systemInfo.ServerName,
                         version = systemInfo.Version,
                         operatingSystem = systemInfo.OperatingSystem,
-                        serverId = systemInfo.Id,
-                        suggestedUserId = userId
+                        serverId = systemInfo.Id
                     }
                 });
             }
@@ -497,7 +462,7 @@ namespace Jellyfin.Plugin.Federation.Api
                         try
                         {
                             libraries = await client.GetSharedLibrariesAsync(myServerId, cancellationToken)
-                                        ?? await client.GetLibrariesAsync(cancellationToken);
+                                        ?? new List<BaseItemDto>();
                         }
                         catch (UnauthorizedAccessException ex)
                         {

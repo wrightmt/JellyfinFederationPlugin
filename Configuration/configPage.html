@@ -423,7 +423,6 @@ var r = Math.random() * 16 | 0;
                 html += '<h3>Server ' + (i + 1) + '</h3>';
    html += '<label>Name:</label><input type="text" class="txtServerName" data-index="' + i + '" value="' + escapeHtml(server.Name) + '" />';
    html += '<label>URL:</label><input type="text" class="txtServerUrl" data-index="' + i + '" value="' + escapeHtml(server.Url) + '" placeholder="http://server:8096" />';
-  html += '<label>API Key:</label><input type="password" class="txtServerApiKey" data-index="' + i + '" value="' + escapeHtml(server.ApiKey) + '" />';
         html += '<label><input type="checkbox" class="chkServerEnabled" data-index="' + i + '" ' + (server.Enabled ? 'checked' : '') + ' /> Enabled</label>';
     html += '<div style="margin-top:15px;">';
           html += '<button type="button" class="btnTestServer" data-index="' + i + '">Test Connection</button>';
@@ -517,8 +516,6 @@ var r = Math.random() * 16 | 0;
    Id: generateGuid(),
   Name: '',
         Url: '',
-       ApiKey: '',
-UserId: '',
        Enabled: true
           });
    renderServers();
@@ -654,12 +651,10 @@ UserId: '',
    currentConfig.RemoteServers.forEach(function(server, i) {
       var nameEl = document.querySelector('.txtServerName[data-index="' + i + '"]');
       var urlEl = document.querySelector('.txtServerUrl[data-index="' + i + '"]');
- var apiKeyEl = document.querySelector('.txtServerApiKey[data-index="' + i + '"]');
       var enabledEl = document.querySelector('.chkServerEnabled[data-index="' + i + '"]');
 
        if (nameEl) server.Name = nameEl.value;
         if (urlEl) server.Url = urlEl.value;
-if (apiKeyEl) server.ApiKey = apiKeyEl.value;
         if (enabledEl) server.Enabled = enabledEl.checked;
         });
          }
@@ -762,12 +757,6 @@ currentConfig.LibraryMappings.forEach(function(mapping, i) {
      'Version: ' + escapeHtml(result.serverInfo.version) + '<br>' +
      'OS: ' + escapeHtml(result.serverInfo.operatingSystem);
             
-     // Save the suggested UserId back to the server config if we don't have one
-if (result.serverInfo.suggestedUserId && !server.UserId) {
-      console.log('[Federation] Saving suggested UserId:', result.serverInfo.suggestedUserId);
-    server.UserId = result.serverInfo.suggestedUserId;
-        statusEl.innerHTML += '<br><em>User ID automatically configured</em>';
-  }
  } else {
    statusEl.style.background = 'rgba(255,68,68,0.2)';
   statusEl.textContent = '✗ ' + result.message;
