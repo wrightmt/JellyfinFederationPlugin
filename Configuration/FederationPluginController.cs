@@ -142,6 +142,92 @@ namespace Jellyfin.Plugin.Federation.Api
             }
         }
 
+
+        /// <summary>
+        /// Returns all local Jellyfin libraries for use by the config UI.
+        /// </summary>
+        [HttpGet("LocalLibraries")]
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public IActionResult GetLocalLibraries()
+        {
+            try
+            {
+                var virtualFolders = _libraryManager.GetVirtualFolders();
+                var libraries = virtualFolders.Select(f => new
+                {
+                    id = f.ItemId,
+                    name = f.Name,
+                    collectionType = f.CollectionType?.ToString()?.ToLowerInvariant() ?? "unknown"
+                }).ToList();
+
+                return Ok(new { success = true, libraries });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Federation] Error getting local libraries");
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Returns the libraries this server is willing to share with the requesting server.
+        /// Remote servers call this passing their own Jellyfin server ID.
+        /// </summary>
+        /// <param name="serverId">The Jellyfin server ID of the requesting server.</param>
+        [HttpGet("SharedLibraries")]
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public IActionResult GetSharedLibraries([FromQuery] string serverId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(serverId))
+                {
+                    return StatusCode(403, new { success = false, message = "serverId is required" });
+                }
+
+                var config = Plugin.Instance?.Configuration;
+                if (config == null)
+                {
+                    return StatusCode(500, new { success = false, message = "Plugin not initialized" });
+                }
+
+                var inbound = config.Inbound ?? new InboundSettings();
+                var entry = inbound.ApprovedServers?.FirstOrDefault(s => s.ServerId == serverId);
+
+                if (entry == null || !entry.Allowed)
+                {
+                    _logger.LogWarning("[Federation] Rejected inbound library request from server: {ServerId}", serverId);
+                    return StatusCode(403, new { success = false, message = "This server has not been approved for federation" });
+                }
+
+                var libraryIds = entry.UseDefaultLibraries
+                    ? (inbound.DefaultSharedLibraryIds ?? new List<string>())
+                    : (entry.CustomLibraryIds ?? new List<string>());
+
+                var virtualFolders = _libraryManager.GetVirtualFolders();
+                var libraries = virtualFolders
+                    .Where(f => libraryIds.Contains(f.ItemId))
+                    .Select(f => new
+                    {
+                        id = f.ItemId,
+                        name = f.Name,
+                        collectionType = f.CollectionType?.ToString()?.ToLowerInvariant() ?? "unknown"
+                    })
+                    .ToList();
+
+                _logger.LogInformation("[Federation] Serving {Count} libraries to server {ServerId}", libraries.Count, serverId);
+                return Ok(new { success = true, libraries });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Federation] Error getting shared libraries");
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
         #endregion
 
         #region Server Management Endpoints
