@@ -554,6 +554,82 @@ catch (Exception ex)
  }
      }
 
+
+        /// <summary>
+        /// Attempts to get libraries from the remote's SharedLibraries endpoint.
+        /// Returns null if the remote doesn't have the federation plugin installed (404).
+        /// Throws UnauthorizedAccessException if the remote has denied this server (403).
+        /// </summary>
+        /// <param name="myServerId">This server's own Jellyfin server ID.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public async Task<List<BaseItemDto>?> GetSharedLibrariesAsync(
+            string myServerId,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var url = $"/Plugins/Federation/SharedLibraries?serverId={Uri.EscapeDataString(myServerId)}";
+                _logger.LogInformation("[Federation] Requesting shared libraries from {ServerName}: {Url}", _server.Name, url);
+
+                var response = await _httpClient.GetAsync(url, cancellationToken);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("[Federation] Remote {ServerName} does not have federation plugin -- using native API", _server.Name);
+                    return null;
+                }
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    _logger.LogWarning("[Federation] Remote {ServerName} denied federation access for this server", _server.Name);
+                    throw new UnauthorizedAccessException($"Remote server '{_server.Name}' has not approved this server for federation");
+                }
+
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("libraries", out var librariesElement))
+                {
+                    _logger.LogWarning("[Federation] SharedLibraries response from {ServerName} has no 'libraries' property", _server.Name);
+                    return new List<BaseItemDto>();
+                }
+
+                var libraries = new List<BaseItemDto>();
+                foreach (var item in librariesElement.EnumerateArray())
+                {
+                    var library = new BaseItemDto();
+                    if (item.TryGetProperty("id", out var idProp))
+                        library.Id = Guid.TryParse(idProp.GetString(), out var guid) ? guid : Guid.NewGuid();
+                    if (item.TryGetProperty("name", out var nameProp))
+                        library.Name = nameProp.GetString();
+                    if (item.TryGetProperty("collectionType", out var typeProp) &&
+                        typeProp.ValueKind != JsonValueKind.Null)
+                    {
+                        var typeStr = typeProp.GetString();
+                        if (!string.IsNullOrEmpty(typeStr) &&
+                            Enum.TryParse<Jellyfin.Data.Enums.CollectionType>(typeStr, true, out var ct))
+                            library.CollectionType = ct;
+                    }
+                    libraries.Add(library);
+                }
+
+                _logger.LogInformation("[Federation] Received {Count} shared libraries from {ServerName}", libraries.Count, _server.Name);
+                return libraries;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Federation] Error calling SharedLibraries on {ServerName}", _server.Name);
+                return null;
+            }
+        }
+
         /// <summary>
 /// Builds a stream URL for a remote item.
    /// </summary>
@@ -706,4 +782,37 @@ if (!string.IsNullOrEmpty(audioCodec))
       /// </summary>
         public bool HasConfiguredPassword { get; set; }
     }
+
+    /// <summary>
+    /// Provides the local Jellyfin server ID, cached after first fetch.
+    /// </summary>
+    public static class LocalServerIdProvider
+    {
+        private static string? _cachedServerId;
+
+        public static async Task<string> GetAsync(ILogger logger, CancellationToken cancellationToken = default)
+        {
+            if (_cachedServerId != null)
+                return _cachedServerId;
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri("http://localhost:8096") };
+                var response = await client.GetAsync("/System/Info/Public", cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var doc = JsonDocument.Parse(content);
+                _cachedServerId = doc.RootElement.GetProperty("Id").GetString() ?? "unknown";
+                logger.LogInformation("[Federation] Local server ID: {Id}", _cachedServerId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "[Federation] Could not fetch local server ID, using fallback");
+                _cachedServerId = "unknown";
+            }
+
+            return _cachedServerId;
+        }
+    }
+
 }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.Federation.Configuration;
 using Jellyfin.Plugin.Federation.Services;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -490,8 +491,26 @@ namespace Jellyfin.Plugin.Federation.Api
 
                         using var client = new RemoteServerClient(server, _loggerFactory.CreateLogger<RemoteServerClient>());
 
-                        // Get libraries
-                        var libraries = await client.GetLibrariesAsync(cancellationToken);
+                        // Try the federation SharedLibraries endpoint first; fall back to native Jellyfin
+                        var myServerId = await LocalServerIdProvider.GetAsync(_logger, cancellationToken);
+                        List<BaseItemDto>? libraries;
+                        try
+                        {
+                            libraries = await client.GetSharedLibrariesAsync(myServerId, cancellationToken)
+                                        ?? await client.GetLibrariesAsync(cancellationToken);
+                        }
+                        catch (UnauthorizedAccessException ex)
+                        {
+                            _logger.LogWarning("[Federation] Access denied by {ServerName}: {Message}", server.Name, ex.Message);
+                            results.Add(new
+                            {
+                                serverId = server.Id,
+                                serverName = server.Name,
+                                error = ex.Message,
+                                libraries = new List<object>()
+                            });
+                            continue;
+                        }
 
                         if (libraries != null && libraries.Count > 0)
                         {
