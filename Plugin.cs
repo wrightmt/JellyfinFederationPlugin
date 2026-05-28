@@ -57,7 +57,7 @@ namespace Jellyfin.Plugin.Federation
             yield return new PluginPageInfo
             {
                 Name = this.Name,
-                EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
+                EmbeddedResourcePath = GetType().Namespace + ".Configuration.redirectPage.html"
             };
         }
 
