@@ -171,6 +171,24 @@ margin-top: 10px;
    <button type="button" id="btnAddServer">Add Server</button>
         </div>
 
+  <div class="section">
+    <h2>Sharing (Inbound)</h2>
+    <p style="opacity:0.7;font-size:0.9em;">Control what this server shares when others add you as a remote.</p>
+
+    <div style="margin-bottom:20px;">
+      <strong>Default Shared Libraries</strong>
+      <p style="opacity:0.6;font-size:0.85em;margin:4px 0 10px;">Approved servers see these unless you override per-server below.</p>
+      <div id="defaultLibraryList"><p>Loading...</p></div>
+    </div>
+
+    <div>
+      <strong>Approved Servers</strong>
+      <p style="opacity:0.6;font-size:0.85em;margin:4px 0 10px;">Only servers listed here (and set to Approved) can see your libraries.</p>
+      <div id="inboundServerList"></div>
+      <button type="button" id="btnAddInboundServer" style="margin-top:10px;">+ Add Server</button>
+    </div>
+  </div>
+
    <div class="section">
        <h2>Virtual Library Mappings</h2>
      <div id="mappingList"></div>
@@ -192,6 +210,80 @@ margin-top: 10px;
         var pluginId = '12345678-1234-1234-1234-123456789abc';
         var currentConfig = { RemoteServers: [], LibraryMappings: [] };
         var apiBaseUrl = window.location.origin;
+
+        var localLibraries = [];
+
+        function loadLocalLibraries() {
+          fetch(apiBaseUrl + '/Plugins/Federation/LocalLibraries')
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+              if (result.success) {
+                localLibraries = result.libraries || [];
+                renderDefaultLibraries();
+                renderInboundServers();
+              }
+            })
+            .catch(function(err) {
+              console.error('[Federation] Error loading local libraries:', err);
+            });
+        }
+
+        function renderDefaultLibraries() {
+          var container = document.getElementById('defaultLibraryList');
+          if (!container) return;
+          var defaults = (currentConfig.Inbound && currentConfig.Inbound.DefaultSharedLibraryIds) || [];
+          if (localLibraries.length === 0) {
+            container.innerHTML = '<p style="opacity:0.6;">No local libraries found.</p>';
+            return;
+          }
+          var html = '';
+          localLibraries.forEach(function(lib) {
+            var checked = defaults.indexOf(lib.id) !== -1 ? 'checked' : '';
+            html += '<label style="display:block;padding:4px 0;">';
+            html += '<input type="checkbox" class="chkDefaultLib" data-lib-id="' + lib.id + '" ' + checked + '> ';
+            html += escapeHtml(lib.name) + ' <span style="opacity:0.5;font-size:0.85em;">(' + lib.collectionType + ')</span>';
+            html += '</label>';
+          });
+          container.innerHTML = html;
+        }
+
+        function renderInboundServers() {
+          var container = document.getElementById('inboundServerList');
+          if (!container) return;
+          var servers = (currentConfig.Inbound && currentConfig.Inbound.ApprovedServers) || [];
+          if (servers.length === 0) {
+            container.innerHTML = '<p style="opacity:0.6;font-size:0.9em;">No inbound servers configured.</p>';
+            return;
+          }
+          var html = '';
+          servers.forEach(function(srv, i) {
+            var allowedColor = srv.Allowed ? 'rgba(82,181,75,0.2)' : 'rgba(255,68,68,0.2)';
+            html += '<div style="background:' + allowedColor + ';border-radius:6px;padding:12px;margin-bottom:10px;">';
+            html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
+            html += '<input class="inboundName" data-idx="' + i + '" value="' + escapeHtml(srv.Name) + '" placeholder="Name" style="flex:1;min-width:120px;">';
+            html += '<input class="inboundServerId" data-idx="' + i + '" value="' + escapeHtml(srv.ServerId) + '" placeholder="Jellyfin Server ID" style="flex:2;min-width:200px;">';
+            html += '<label><input type="checkbox" class="inboundAllowed" data-idx="' + i + '" ' + (srv.Allowed ? 'checked' : '') + '> Approved</label>';
+            html += '<button type="button" class="btnRemoveInbound" data-idx="' + i + '" style="background:rgba(255,68,68,0.3);border:none;padding:4px 10px;border-radius:4px;cursor:pointer;">Remove</button>';
+            html += '</div>';
+            html += '<div style="margin-top:8px;">';
+            html += '<label><input type="radio" class="inboundLibRadio" data-idx="' + i + '" name="inboundLibMode' + i + '" value="default" ' + (srv.UseDefaultLibraries ? 'checked' : '') + '> Use default libraries</label> &nbsp;';
+            html += '<label><input type="radio" class="inboundLibRadio" data-idx="' + i + '" name="inboundLibMode' + i + '" value="custom" ' + (!srv.UseDefaultLibraries ? 'checked' : '') + '> Custom</label>';
+            html += '</div>';
+            if (!srv.UseDefaultLibraries) {
+              var custom = srv.CustomLibraryIds || [];
+              html += '<div class="inboundCustomLibs" data-idx="' + i + '" style="margin-top:8px;margin-left:16px;">';
+              localLibraries.forEach(function(lib) {
+                var checked = custom.indexOf(lib.id) !== -1 ? 'checked' : '';
+                html += '<label style="display:block;padding:2px 0;"><input type="checkbox" class="chkCustomLib" data-idx="' + i + '" data-lib-id="' + lib.id + '" ' + checked + '> ' + escapeHtml(lib.name) + '</label>';
+              });
+              html += '</div>';
+            }
+            html += '</div>';
+          });
+          container.innerHTML = html;
+        }
+
+
      
         // Progress tracking
    var progressState = {
@@ -510,6 +602,50 @@ UserId: '',
         }
     });
 
+
+        // Inbound: add server
+        var btnAdd = document.getElementById('btnAddInboundServer');
+        if (btnAdd) {
+          btnAdd.addEventListener('click', function() {
+            if (!currentConfig.Inbound) currentConfig.Inbound = { DefaultSharedLibraryIds: [], ApprovedServers: [] };
+            if (!currentConfig.Inbound.ApprovedServers) currentConfig.Inbound.ApprovedServers = [];
+            currentConfig.Inbound.ApprovedServers.push({ Id: generateGuid(), Name: '', ServerId: '', Allowed: true, UseDefaultLibraries: true, CustomLibraryIds: [] });
+            renderInboundServers();
+          });
+        }
+
+        // Inbound: delegated events on server list
+        var inboundList = document.getElementById('inboundServerList');
+        if (inboundList) {
+          inboundList.addEventListener('change', function(e) {
+            var t = e.target;
+            var idx = parseInt(t.getAttribute('data-idx'));
+            if (isNaN(idx)) return;
+            var srv = currentConfig.Inbound.ApprovedServers[idx];
+            if (t.classList.contains('inboundAllowed')) srv.Allowed = t.checked;
+            if (t.classList.contains('inboundLibRadio')) {
+              srv.UseDefaultLibraries = t.value === 'default';
+              renderInboundServers();
+            }
+          });
+          inboundList.addEventListener('input', function(e) {
+            var t = e.target;
+            var idx = parseInt(t.getAttribute('data-idx'));
+            if (isNaN(idx)) return;
+            var srv = currentConfig.Inbound.ApprovedServers[idx];
+            if (t.classList.contains('inboundName')) srv.Name = t.value;
+            if (t.classList.contains('inboundServerId')) srv.ServerId = t.value;
+          });
+          inboundList.addEventListener('click', function(e) {
+            var t = e.target;
+            if (t.classList.contains('btnRemoveInbound')) {
+              var idx = parseInt(t.getAttribute('data-idx'));
+              currentConfig.Inbound.ApprovedServers.splice(idx, 1);
+              renderInboundServers();
+            }
+          });
+        }
+
   console.log('[Federation] Handlers attached');
 }
 
@@ -539,6 +675,26 @@ currentConfig.LibraryMappings.forEach(function(mapping, i) {
      if (enabledEl) mapping.Enabled = enabledEl.checked;
       });
             }
+
+        // Collect default shared libraries
+        if (!currentConfig.Inbound) currentConfig.Inbound = { DefaultSharedLibraryIds: [], ApprovedServers: [] };
+        currentConfig.Inbound.DefaultSharedLibraryIds = [];
+        document.querySelectorAll('.chkDefaultLib:checked').forEach(function(cb) {
+          currentConfig.Inbound.DefaultSharedLibraryIds.push(cb.getAttribute('data-lib-id'));
+        });
+
+        // Collect custom library selections per inbound server
+        if (currentConfig.Inbound.ApprovedServers) {
+          currentConfig.Inbound.ApprovedServers.forEach(function(srv, i) {
+            if (!srv.UseDefaultLibraries) {
+              srv.CustomLibraryIds = [];
+              document.querySelectorAll('.chkCustomLib[data-idx="' + i + '"]:checked').forEach(function(cb) {
+                srv.CustomLibraryIds.push(cb.getAttribute('data-lib-id'));
+              });
+            }
+          });
+        }
+
         }
 
   function saveConfiguration() {
@@ -994,6 +1150,8 @@ console.log('[Federation] Applying library selection for mapping:', mappingIndex
          currentConfig = config || { RemoteServers: [], LibraryMappings: [] };
 renderServers();
     renderMappings();
+    renderDefaultLibraries();
+    renderInboundServers();
        attachHandlers();
   setStatus('Ready - ' + currentConfig.RemoteServers.length + ' servers, ' + currentConfig.LibraryMappings.length + ' mappings');
   
@@ -1009,6 +1167,7 @@ renderServers();
   // Start loading immediately
         setStatus('Initializing...');
       loadConfiguration();
+      loadLocalLibraries();
     })();
     </script>
 </body>
