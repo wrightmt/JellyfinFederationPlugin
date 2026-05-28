@@ -3,14 +3,18 @@
 <head>
     <meta charset="utf-8">
     <title>Jelly Federation ezlink</title>
-    <style>
-        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-        iframe { display: block; width: 100%; height: 100vh; border: none; }
-    </style>
 </head>
 <body>
-    <div data-role="page" class="page type-interior pluginConfigurationPage" style="height:100%;">
-        <iframe src="/Plugins/Federation/Config" allowfullscreen></iframe>
+    <div data-role="page" class="page type-interior pluginConfigurationPage">
+        <div data-role="content">
+            <div class="content-primary">
+                <p>Loading Jelly Federation ezlink configuration...</p>
+                <p><a href="/Plugins/Federation/Config">Click here if not redirected</a></p>
+            </div>
+        </div>
     </div>
+    <script type="text/javascript">
+        window.location.replace('/Plugins/Federation/Config');
+    </script>
 </body>
 </html>
